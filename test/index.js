@@ -1,10 +1,10 @@
 var tape = require('tape')
 var memdown = require('memdown')
 var levelup = require('levelup')
-var Sublevel = require('../')
+var Sublink = require('../')
 
 var raw = levelup('/tmp/db', { db: memdown })
-var db = Sublevel(raw)
+var db = Sublink(raw)
 
 tape('put', function (t) {
   t.plan(3)
@@ -35,23 +35,23 @@ tape('put key to be overridden by link', function (t) {
   })
 })
 
-tape('put to sublevel', function (t) {
+tape('put to sublink', function (t) {
   t.plan(7)
 
-  var sub = db.sublevel('a')
+  var sub = db.sublink('a')
   sub.put('x', '42', function (err) {
     t.error(err)
 
     var rs = raw.createReadStream()
     var expected = [
       {
-        key: 'a' + Sublevel.LINK_SUFFIX,
-        value: Sublevel.LINK_SUFFIX
+        key: 'a' + Sublink.LINK_SUFFIX,
+        value: Sublink.LINK_SUFFIX
       }, {
         key: 'x',
         value: '42'
       }, {
-        key: Sublevel.SEPARATOR + 'a' + Sublevel.SEPARATOR + 'x',
+        key: Sublink.SEPARATOR + 'a' + Sublink.SEPARATOR + 'x',
         value: '42'
       }
     ]
@@ -64,29 +64,29 @@ tape('put to sublevel', function (t) {
   })
 })
 
-tape('get from sublevel', function (t) {
+tape('get from sublink', function (t) {
   t.plan(2)
 
-  var sub = db.sublevel('a')
+  var sub = db.sublink('a')
   sub.get('x', function (err, value) {
     t.error(err)
     t.equal(value, '42')
   })
 })
 
-tape('put to sub-sublevel', function (t) {
+tape('put to sub-sublink', function (t) {
   t.plan(1)
 
-  var sub = db.sublevel('a').sublevel('a')
+  var sub = db.sublink('a').sublink('a')
   sub.put('x', '42', function (err) {
     t.error(err)
   })
 })
 
-tape('keyStream from sublevel shows link to sublevel', function (t) {
+tape('keyStream from sublink shows link to sublink', function (t) {
   t.plan(2)
 
-  var sub = db.sublevel('a')
+  var sub = db.sublink('a')
   var rs = sub.createKeyStream()
   var expected = [ 'a', 'x' ]
 
@@ -96,14 +96,14 @@ tape('keyStream from sublevel shows link to sublevel', function (t) {
   })
 })
 
-tape('readStream from top level shows link to sublevel', function (t) {
+tape('readStream from top level shows link to sublink', function (t) {
   t.plan(4)
 
   var rs = db.createReadStream()
   var expected = [
     {
       key: 'a',
-      constructor: Sublevel
+      constructor: Sublink
     }, {
       key: 'x',
       constructor: String
@@ -117,7 +117,7 @@ tape('readStream from top level shows link to sublevel', function (t) {
   })
 })
 
-tape('put to top level link removes corresponding sublevels', function (t) {
+tape('put to top level link removes corresponding sublinks', function (t) {
   t.plan(5)
 
   db.put('a', '42', function (err) {
@@ -145,7 +145,7 @@ tape('put to top level link removes corresponding sublevels', function (t) {
 tape('batch', function (t) {
   t.plan(7)
 
-  var sub = db.sublevel('a')
+  var sub = db.sublink('a')
   sub.batch([
     {
       type: 'put',
@@ -158,13 +158,13 @@ tape('batch', function (t) {
     var rs = raw.createReadStream()
     var expected = [
       {
-        key: 'a' + Sublevel.LINK_SUFFIX,
-        value: Sublevel.LINK_SUFFIX
+        key: 'a' + Sublink.LINK_SUFFIX,
+        value: Sublink.LINK_SUFFIX
       }, {
         key: 'x',
         value: '42'
       }, {
-        key: Sublevel.SEPARATOR + 'a' + Sublevel.SEPARATOR + 'x',
+        key: Sublink.SEPARATOR + 'a' + Sublink.SEPARATOR + 'x',
         value: '42'
       }
     ]
@@ -177,7 +177,7 @@ tape('batch', function (t) {
   })
 })
 
-tape('batch removes overridden sublevels', function (t) {
+tape('batch removes overridden sublinks', function (t) {
   t.plan(3)
 
   db.batch([
@@ -212,16 +212,16 @@ tape('ensure links', function (t) {
   t.plan(13)
 
   var sub = db
-    .sublevel('q')
-    .sublevel('w')
-    .sublevel('e')
-    .sublevel('r')
+    .sublink('q')
+    .sublink('w')
+    .sublink('e')
+    .sublink('r')
 
   sub.put('x', '42', function (err) {
     t.error(err)
 
-    var S = Sublevel.SEPARATOR
-    var L = Sublevel.LINK_SUFFIX
+    var S = Sublink.SEPARATOR
+    var L = Sublink.LINK_SUFFIX
     var rs = raw.createReadStream()
     var expected = [
       {
@@ -253,7 +253,7 @@ tape('ensure links', function (t) {
   })
 })
 
-tape('del removes sublevels', function (t) {
+tape('del removes sublinks', function (t) {
   t.plan(3)
 
   db.del('q', function (err) {

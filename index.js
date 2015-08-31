@@ -1,13 +1,19 @@
-module.exports = Sublevel
+module.exports = Sublink
 
-var thru = require('through2').obj
+var TransformStream = require('stream').Transform
 
-var SEPARATOR = Sublevel.SEPARATOR = '\uD83F\uDFFF' // unicode: 0x10FFFF, utf8: 0xF4 0x8F 0xBF 0xBF
-var LINK_SUFFIX = Sublevel.LINK_SUFFIX = '\u0000'   // unicode: 0x00, utf8: 0x00
+function thru (f) {
+  var tr = new TransformStream({ objectMode: true })
+  tr._transform = f
+  return tr
+}
 
-function Sublevel (levelup) {
-  if (!(this instanceof Sublevel)) {
-    return new Sublevel(levelup)
+var SEPARATOR = Sublink.SEPARATOR = '\uD83F\uDFFF' // unicode: 0x10FFFF, utf8: 0xF4 0x8F 0xBF 0xBF
+var LINK_SUFFIX = Sublink.LINK_SUFFIX = '\u0000'   // unicode: 0x00, utf8: 0x00
+
+function Sublink (levelup) {
+  if (!(this instanceof Sublink)) {
+    return new Sublink(levelup)
   }
 
   this._levelup = levelup
@@ -15,20 +21,20 @@ function Sublevel (levelup) {
   this._prefix = ''
 }
 
-Sublevel.prototype.toString = function () {
+Sublink.prototype.toString = function () {
   var name = this._name ? ' ' + this._name : ''
-  return '<Sublevel' + name + '>'
+  return '<Sublink' + name + '>'
 }
 
-Sublevel.prototype.sublevel = function (name) {
-  var sublevel = new Sublevel(this._levelup)
-  sublevel._name = name
-  sublevel._path = this._path.concat(name)
-  sublevel._prefix = this._prefix + SEPARATOR + name + SEPARATOR
-  return sublevel
+Sublink.prototype.sublink = function (name) {
+  var sublink = new Sublink(this._levelup)
+  sublink._name = name
+  sublink._path = this._path.concat(name)
+  sublink._prefix = this._prefix + SEPARATOR + name + SEPARATOR
+  return sublink
 }
 
-Sublevel.prototype.put = function (key, value, opts, cb) {
+Sublink.prototype.put = function (key, value, opts, cb) {
   if (typeof opts === 'function') {
     cb = opts
     opts = undefined
@@ -62,7 +68,7 @@ Sublevel.prototype.put = function (key, value, opts, cb) {
   })
 }
 
-Sublevel.prototype._ensureLink = function (batch) {
+Sublink.prototype._ensureLink = function (batch) {
   if (this._prefix) {
     var prefix = ''
     for (var i = 0; i < this._path.length; i++) {
@@ -81,7 +87,7 @@ Sublevel.prototype._ensureLink = function (batch) {
   }
 }
 
-Sublevel.prototype.get = function (key, opts, cb) {
+Sublink.prototype.get = function (key, opts, cb) {
   if (typeof opts === 'function') {
     cb = opts
     opts = undefined
@@ -96,12 +102,12 @@ Sublevel.prototype.get = function (key, opts, cb) {
         cb(err)
       }
     } else {
-      cb(null, self.sublevel(key))
+      cb(null, self.sublink(key))
     }
   })
 }
 
-Sublevel.prototype.del = function (key, opts, cb) {
+Sublink.prototype.del = function (key, opts, cb) {
   if (typeof opts === 'function') {
     cb = opts
     opts = undefined
@@ -124,7 +130,7 @@ Sublevel.prototype.del = function (key, opts, cb) {
   })
 }
 
-Sublevel.prototype._del = function (key, cb) {
+Sublink.prototype._del = function (key, cb) {
   var batch = [
     {
       type: 'del',
@@ -134,10 +140,10 @@ Sublevel.prototype._del = function (key, cb) {
       key: this._prefix + key
     }
   ]
-  var sublevelPrefix = this._prefix + SEPARATOR + key + SEPARATOR
+  var sublinkPrefix = this._prefix + SEPARATOR + key + SEPARATOR
   var ks = this._levelup.createKeyStream({
-    start: sublevelPrefix,
-    end: sublevelPrefix + SEPARATOR + SEPARATOR
+    start: sublinkPrefix,
+    end: sublinkPrefix + SEPARATOR + SEPARATOR
   })
 
   ks.on('data', function (key) {
@@ -161,7 +167,7 @@ Sublevel.prototype._del = function (key, cb) {
   })
 }
 
-Sublevel.prototype.batch = function (batch, opts, cb) {
+Sublink.prototype.batch = function (batch, opts, cb) {
   var self = this
   var prebatch = []
   var hasPut = false
@@ -208,7 +214,7 @@ Sublevel.prototype.batch = function (batch, opts, cb) {
   }
 }
 
-Sublevel.prototype.createKeyStream = function (opts) {
+Sublink.prototype.createKeyStream = function (opts) {
   opts = opts || {}
   var prefix = this._prefix
   var end = ''
@@ -239,7 +245,7 @@ Sublevel.prototype.createKeyStream = function (opts) {
   return tr
 }
 
-Sublevel.prototype.createReadStream = function (opts) {
+Sublink.prototype.createReadStream = function (opts) {
   opts = opts || {}
   var prefix = this._prefix
   var end = ''
@@ -262,7 +268,7 @@ Sublevel.prototype.createReadStream = function (opts) {
     }
     if (chunk.key.slice(-1)[0] === LINK_SUFFIX) {
       chunk.key = chunk.key.slice(0, -1)
-      chunk.value = self.sublevel(chunk.key)
+      chunk.value = self.sublink(chunk.key)
     }
     cb(null, chunk)
   })

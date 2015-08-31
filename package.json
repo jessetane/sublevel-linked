@@ -1,12 +1,9 @@
 {
-  "name": "sublevel-linked",
+  "name": "sublink",
   "version": "1.0.0",
-  "description": "Like level-sublevel but with links between sublevels",
+  "description": "Like level-sublevel but with links",
   "scripts": {
     "test": "standard && node test"
-  },
-  "dependencies": {
-    "through2": "^2.0.0"
   },
   "devDependencies": {
     "levelup": "^1.2.1",
@@ -14,7 +11,7 @@
     "standard": "^5.1.1",
     "tape": "^4.2.0"
   },
-  "repository": "https://github.com/jessetane/sublevel-linked",
+  "repository": "https://github.com/jessetane/sublink",
   "author": "jesse.tane@gmail.com",
   "license": "WTFPL"
 }
