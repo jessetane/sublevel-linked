@@ -33,7 +33,7 @@ db.put('x', '42', function () {
 
 ## Install
 ```bash
-$ npm install jessetane/sublink#1.0.0
+$ npm install jessetane/sublink#2.0.0
 ```
 
 ## Test
@@ -42,7 +42,10 @@ $ npm run test
 ```
 
 ## Notes
-* A `batch` implementation is included for compatibility with levelup, but it doesn't guarantee atomicity! To work, it has to read keys from the current space in order to ensure they aren't links to nested spaces - these read operations are asynchronous and therefore by the time your batch is ready to be executed, the database may have changed.
+* You must explicitly delete sublinks before attempting to overwrite them with raw values.
+* You must explicitly delete raw values before attempting to overwrite them with sublinks.
+* Atomicity is not guaranteed! Although unlikely, data corruption is probably possible because keys must be read (asynchronously) and checked for existence before updates can be written.
 * Currently options are passed through to underlying levelup calls, however altering keyEncoding would break this module so maybe don't do that.
+
 ## License
 WTFPL
