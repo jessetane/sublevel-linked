@@ -1,5 +1,8 @@
 module.exports = Sublink
 
+var SEPARATOR = Sublink.SEPARATOR = '\uD83F\uDFFF' // unicode: 0x10FFFF, utf8: 0xF4 0x8F 0xBF 0xBF
+var LINK_SUFFIX = Sublink.LINK_SUFFIX = '\u0000'   // unicode: 0x00, utf8: 0x00
+
 var TransformStream = require('stream').Transform
 
 function thru (f) {
@@ -8,8 +11,13 @@ function thru (f) {
   return tr
 }
 
-var SEPARATOR = Sublink.SEPARATOR = '\uD83F\uDFFF' // unicode: 0x10FFFF, utf8: 0xF4 0x8F 0xBF 0xBF
-var LINK_SUFFIX = Sublink.LINK_SUFFIX = '\u0000'   // unicode: 0x00, utf8: 0x00
+var toPathRegex = new RegExp(SEPARATOR + '+', 'g')
+
+function toPath (rawKeyPath) {
+  var path = rawKeyPath.replace(toPathRegex, '/')
+  if (path[0] !== '/') path = '/' + path
+  return path
+}
 
 function Sublink (levelup) {
   if (!(this instanceof Sublink)) {
@@ -40,51 +48,26 @@ Sublink.prototype.put = function (key, value, opts, cb) {
     opts = undefined
   }
 
-  var batch = [
-    {
-      type: 'put',
-      key: this._prefix + key,
-      value: value
-    }
-  ]
-
-  this._ensureLink(batch)
-
   var self = this
-  this._levelup.get(this._prefix + key + LINK_SUFFIX, function (err) {
-    if (err) {
-      if (err.notFound) {
-        self._levelup.batch(batch, opts, cb)
-      } else {
-        cb(err)
+  this._isLink(key, function (err, isLink) {
+    if (err || isLink) {
+      if (!err && isLink) {
+        err = new Error('cannot overwrite sublink at key ' + key)
       }
-    } else {
-      self._del(key, function (err, delBatch) {
-        if (err) return cb(err)
-        batch = delBatch.concat(batch)
-        self._levelup.batch(batch, opts, cb)
-      })
+      return cb(err)
     }
-  })
-}
-
-Sublink.prototype._ensureLink = function (batch) {
-  if (this._prefix) {
-    var prefix = ''
-    for (var i = 0; i < this._path.length; i++) {
-      var name = this._path[i]
-      batch[batch.length] = {
+    var batch = [
+      {
         type: 'put',
-        key: prefix + name + LINK_SUFFIX,
-        value: LINK_SUFFIX
+        key: self._prefix + key,
+        value: value
       }
-      batch[batch.length] = {
-        type: 'del',
-        key: prefix + name
-      }
-      prefix += SEPARATOR + name + SEPARATOR
-    }
-  }
+    ]
+    self._ensureParentLinks(batch, function (err) {
+      if (err) return cb(err)
+      self._levelup.batch(batch, opts, cb)
+    })
+  })
 }
 
 Sublink.prototype.get = function (key, opts, cb) {
@@ -122,7 +105,7 @@ Sublink.prototype.del = function (key, opts, cb) {
         cb(err)
       }
     } else {
-      self._del(key, function (err, batch) {
+      self._delLink(key, function (err, batch) {
         if (err) return cb(err)
         self._levelup.batch(batch, cb)
       })
@@ -130,7 +113,182 @@ Sublink.prototype.del = function (key, opts, cb) {
   })
 }
 
-Sublink.prototype._del = function (key, cb) {
+Sublink.prototype.batch = function (batch, opts, cb) {
+  if (typeof opts === 'function') {
+    cb = opts
+    opts = undefined
+  }
+
+  var self = this
+  var conflicts = {}
+  var delBatch = []
+  var hasPut = false
+  var n = batch.length
+  batch.forEach(function (chunk, i) {
+    var isPut = chunk.type === 'put'
+    if (isPut) hasPut = true
+    self._isLink(chunk.key, function (err, isLink) {
+      if (cb._called) return
+      if (err) {
+        cb._called = true
+        return cb(err)
+      }
+      batch[i] = {
+        type: chunk.type,
+        key: self._prefix + chunk.key,
+        value: chunk.value
+      }
+      if (isLink) {
+        if (isPut) {
+          conflicts[chunk.key] = conflicts[chunk.key] !== false
+          if (--n === 0) maybeReady()
+        } else {
+          conflicts[chunk.key] = false
+          self._delLink(chunk.key, function (err, _delBatch) {
+            if (cb._called) return
+            if (err) {
+              cb._called = true
+              return cb(err)
+            }
+            delBatch = delBatch.concat(_delBatch)
+            if (--n === 0) maybeReady()
+          })
+        }
+      } else {
+        if (--n === 0) maybeReady()
+      }
+    })
+  })
+
+  function maybeReady () {
+    if (hasPut) {
+      for (var key in conflicts) {
+        if (conflicts[key]) {
+          return cb(new Error('cannot overwrite sublink at key ' + key))
+        }
+      }
+      self._ensureParentLinks(batch, ready)
+    } else {
+      ready()
+    }
+  }
+
+  function ready (err) {
+    if (err) return cb(err)
+    self._levelup.batch(delBatch.concat(batch), opts, cb)
+  }
+}
+
+Sublink.prototype.createKeyStream = function (opts) {
+  opts = opts || {}
+  var prefix = this._prefix
+  var end = ''
+
+  if (prefix) {
+    if (opts.start) opts.start = prefix + opts.start
+    else opts.start = prefix
+    end = prefix
+  }
+
+  if (opts.end) opts.end = end + opts.end
+  else opts.end = end
+  opts.end += SEPARATOR
+
+  var rs = this._levelup.createKeyStream(opts)
+  var tr = thru(function (key, enc, cb) {
+    if (prefix) {
+      key = key.slice(prefix.length)
+    }
+    if (key.slice(-1)[0] === LINK_SUFFIX) {
+      key = key.slice(0, -1)
+    }
+    cb(null, key)
+  })
+  rs.on('error', tr.emit.bind(tr, 'error'))
+  rs.pipe(tr)
+  return tr
+}
+
+Sublink.prototype.createReadStream = function (opts) {
+  opts = opts || {}
+  var prefix = this._prefix
+  var end = ''
+
+  if (prefix) {
+    if (opts.start) opts.start = prefix + opts.start
+    else opts.start = prefix
+    end = prefix
+  }
+
+  if (opts.end) opts.end = end + opts.end
+  else opts.end = end
+  opts.end += SEPARATOR
+
+  var self = this
+  var rs = this._levelup.createReadStream(opts)
+  var tr = thru(function (chunk, enc, cb) {
+    if (prefix) {
+      chunk.key = chunk.key.slice(prefix.length)
+    }
+    if (chunk.key.slice(-1)[0] === LINK_SUFFIX) {
+      chunk.key = chunk.key.slice(0, -1)
+      chunk.value = self.sublink(chunk.key)
+    }
+    cb(null, chunk)
+  })
+  rs.on('error', tr.emit.bind(tr, 'error'))
+  rs.pipe(tr)
+  return tr
+}
+
+Sublink.prototype._isLink = function (key, cb) {
+  var isLink = false
+  this._levelup.get(this._prefix + key + LINK_SUFFIX, function (err) {
+    if (err) {
+      if (err.notFound) {
+        err = null
+      }
+    } else {
+      isLink = true
+    }
+    cb(err, isLink)
+  })
+}
+
+Sublink.prototype._ensureParentLinks = function (batch, cb) {
+  if (!this._prefix) {
+    return cb()
+  }
+
+  var self = this
+  var prefix = ''
+  var n = this._path.length
+  this._path.forEach(function (name) {
+    var localPrefix = prefix
+    prefix += SEPARATOR + name + SEPARATOR
+    self._levelup.get(localPrefix + name, function (err) {
+      if (cb._called) return
+      if (err) {
+        if (err.notFound) {
+          err = null
+          batch[batch.length] = {
+            type: 'put',
+            key: localPrefix + name + LINK_SUFFIX,
+            value: LINK_SUFFIX
+          }
+        }
+      } else {
+        err = new Error('cannot overwrite existing value at key ' + toPath(localPrefix + name))
+      }
+      if (err || --n === 0) {
+        cb._called = true
+        cb(err)
+      }
+    })
+  })
+}
+
+Sublink.prototype._delLink = function (key, cb) {
   var batch = [
     {
       type: 'del',
@@ -165,115 +323,4 @@ Sublink.prototype._del = function (key, cb) {
       cb(null, batch)
     }
   })
-}
-
-Sublink.prototype.batch = function (batch, opts, cb) {
-  var self = this
-  var prebatch = []
-  var hasPut = false
-  var n = batch.length
-
-  batch.forEach(function (chunk, i) {
-    self._levelup.get(self._prefix + chunk.key + LINK_SUFFIX, function (err) {
-      if (err) {
-        if (err.notFound) {
-          if (--n === 0) ready()
-        } else if (!cb._called) {
-          cb._called = true
-          cb(err)
-        }
-      } else {
-        self._del(chunk.key, function (err, delBatch) {
-          if (err) {
-            if (!cb._called) {
-              cb._called = true
-              cb(err)
-            }
-            return
-          }
-          prebatch = prebatch.concat(delBatch)
-          if (--n === 0) ready()
-        })
-      }
-    })
-
-    batch[i] = {
-      type: chunk.type,
-      key: self._prefix + chunk.key,
-      value: chunk.value
-    }
-
-    if (chunk.type === 'put') {
-      hasPut = true
-    }
-  })
-
-  function ready () {
-    if (hasPut) self._ensureLink(batch)
-    self._levelup.batch(prebatch.concat(batch), opts, cb)
-  }
-}
-
-Sublink.prototype.createKeyStream = function (opts) {
-  opts = opts || {}
-  var prefix = this._prefix
-  var end = ''
-
-  if (prefix) {
-    if (opts.start) opts.start = prefix + opts.start
-    else opts.start = prefix
-    end = prefix
-  }
-
-  if (opts.end) opts.end = end + opts.end
-  else opts.end = end
-  opts.end += SEPARATOR
-
-  var rs = this._levelup.createKeyStream(opts)
-  var tr = thru(function (key, enc, cb) {
-    if (prefix) {
-      key = key.slice(prefix.length)
-    }
-    if (key.slice(-1)[0] === LINK_SUFFIX) {
-      key = key.slice(0, -1)
-    }
-    cb(null, key)
-  })
-  rs.on('error', tr.emit.bind(tr, 'error'))
-  rs.pipe(tr)
-
-  return tr
-}
-
-Sublink.prototype.createReadStream = function (opts) {
-  opts = opts || {}
-  var prefix = this._prefix
-  var end = ''
-
-  if (prefix) {
-    if (opts.start) opts.start = prefix + opts.start
-    else opts.start = prefix
-    end = prefix
-  }
-
-  if (opts.end) opts.end = end + opts.end
-  else opts.end = end
-  opts.end += SEPARATOR
-
-  var self = this
-  var rs = this._levelup.createReadStream(opts)
-  var tr = thru(function (chunk, enc, cb) {
-    if (prefix) {
-      chunk.key = chunk.key.slice(prefix.length)
-    }
-    if (chunk.key.slice(-1)[0] === LINK_SUFFIX) {
-      chunk.key = chunk.key.slice(0, -1)
-      chunk.value = self.sublink(chunk.key)
-    }
-    cb(null, chunk)
-  })
-  rs.on('error', tr.emit.bind(tr, 'error'))
-  rs.pipe(tr)
-
-  return tr
 }
