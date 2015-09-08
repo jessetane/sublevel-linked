@@ -27,11 +27,29 @@ tape('get', function (t) {
   })
 })
 
-tape('put key to be overridden by link', function (t) {
+tape('put key to be overwritten by link', function (t) {
   t.plan(1)
 
-  db.put('a', '42', function (err) {
-    t.error(err)
+  db
+    .sublink('a')
+    .put('b', '42', function (err) {
+      t.error(err)
+    })
+})
+
+tape('cannot put to sublink if key path holds an existing value', function (t) {
+  t.plan(2)
+
+  var sub = db
+    .sublink('a')
+    .sublink('b')
+
+  sub.put('x', '42', function (err) {
+    t.equal(err.message, 'cannot overwrite existing value at key /a/b')
+
+    db.del('a', function (err) {
+      t.error(err)
+    })
   })
 })
 
@@ -117,70 +135,18 @@ tape('readStream from top level shows link to sublink', function (t) {
   })
 })
 
-tape('put to top level link removes corresponding sublinks', function (t) {
-  t.plan(5)
+tape('put cannot overwrite existing sublinks', function (t) {
+  t.plan(1)
 
   db.put('a', '42', function (err) {
-    t.error(err)
-
-    var rs = raw.createReadStream()
-    var expected = [
-      {
-        key: 'a',
-        value: '42'
-      }, {
-        key: 'x',
-        value: '42'
-      }
-    ]
-
-    var n = 0
-    rs.on('data', function (chunk) {
-      t.equal(chunk.key, expected[n].key)
-      t.equal(chunk.value, expected[n++].value)
-    })
+    t.ok(err)
   })
 })
 
-tape('batch', function (t) {
-  t.plan(7)
-
-  var sub = db.sublink('a')
-  sub.batch([
-    {
-      type: 'put',
-      key: 'x',
-      value: '42'
-    }
-  ], function (err) {
-    t.error(err)
-
-    var rs = raw.createReadStream()
-    var expected = [
-      {
-        key: 'a' + Sublink.LINK_SUFFIX,
-        value: Sublink.LINK_SUFFIX
-      }, {
-        key: 'x',
-        value: '42'
-      }, {
-        key: Sublink.SEPARATOR + 'a' + Sublink.SEPARATOR + 'x',
-        value: '42'
-      }
-    ]
-
-    var n = 0
-    rs.on('data', function (chunk) {
-      t.equal(chunk.key, expected[n].key)
-      t.equal(chunk.value, expected[n++].value)
-    })
-  })
-})
-
-tape('batch removes overridden sublinks', function (t) {
+tape('batch cannot overwrite existing sublinks without explicit del', function (t) {
   t.plan(3)
 
-  db.batch([
+  var batch = [
     {
       type: 'put',
       key: 'a',
@@ -189,27 +155,32 @@ tape('batch removes overridden sublinks', function (t) {
       type: 'del',
       key: 'x'
     }
-  ], function (err) {
-    t.error(err)
+  ]
 
-    var rs = raw.createReadStream()
-    var expected = [
-      {
-        key: 'a',
-        value: '42'
-      }
-    ]
+  db.batch(batch, function (err) {
+    t.ok(err)
 
-    var n = 0
-    rs.on('data', function (chunk) {
-      t.equal(chunk.key, expected[n].key)
-      t.equal(chunk.value, expected[n++].value)
+    batch[batch.length] = {
+      type: 'del',
+      key: 'a'
+    }
+
+    db.batch(batch, function (err) {
+      t.error(err)
+
+      var rs = raw.createReadStream()
+      rs.on('data', function (chunk) {
+        t.fail()
+      })
+      rs.on('end', function () {
+        t.pass()
+      })
     })
   })
 })
 
-tape('ensure links', function (t) {
-  t.plan(13)
+tape('ensure parent links', function (t) {
+  t.plan(11)
 
   var sub = db
     .sublink('q')
@@ -225,9 +196,6 @@ tape('ensure links', function (t) {
     var rs = raw.createReadStream()
     var expected = [
       {
-        key: 'a',
-        value: '42'
-      }, {
         key: 'q' + L,
         value: L
       }, {
@@ -254,23 +222,17 @@ tape('ensure links', function (t) {
 })
 
 tape('del removes sublinks', function (t) {
-  t.plan(3)
+  t.plan(2)
 
   db.del('q', function (err) {
     t.error(err)
 
     var rs = raw.createReadStream()
-    var expected = [
-      {
-        key: 'a',
-        value: '42'
-      }
-    ]
-
-    var n = 0
     rs.on('data', function (chunk) {
-      t.equal(chunk.key, expected[n].key)
-      t.equal(chunk.value, expected[n++].value)
+      t.fail()
+    })
+    rs.on('end', function () {
+      t.pass()
     })
   })
 })
