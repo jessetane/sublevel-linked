@@ -262,3 +262,17 @@ tape('pass in sublink as levelup', function (t) {
   t.equal(sub._path.length, 2)
   t.equal(sub._prefix, Sublink.SEPARATOR + 'a' + Sublink.SEPARATOR + Sublink.SEPARATOR + 'b' + Sublink.SEPARATOR)
 })
+
+tape('superlink', function (t) {
+  t.plan(3)
+
+  var sub = db
+    .sublink('a')
+    .sublink('b')
+    .superlink()
+    .superlink()
+
+  t.equal(sub.name, '')
+  t.equal(sub._path.length, 0)
+  t.equal(sub._prefix, '')
+})
