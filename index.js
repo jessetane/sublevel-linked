@@ -42,6 +42,17 @@ Sublink.prototype.sublink = function (name) {
   return sublink
 }
 
+Sublink.prototype.superlink = function () {
+  if (this._path.length === 0) return this
+  var sublink = new Sublink(this._levelup)
+  if (this._path.length > 1) {
+    sublink._path = this._path.slice(0, -1)
+    sublink._prefix = this._prefix.slice(0, -(this.name.length + SEPARATOR.length * 2))
+    sublink.name = sublink._path.slice(-1)[0]
+  }
+  return sublink
+}
+
 Sublink.prototype.put = function (key, value, opts, cb) {
   if (typeof opts === 'function') {
     cb = opts
