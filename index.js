@@ -18,25 +18,25 @@ function Sublink (levelup) {
 
   if (levelup instanceof Sublink) {
     this._levelup = levelup._levelup
-    this._name = levelup.name
+    this.name = levelup.name
     this._path = levelup._path.slice()
     this._prefix = levelup._prefix
   } else {
     this._levelup = levelup
-    this._name = ''
+    this.name = ''
     this._path = []
     this._prefix = ''
   }
 }
 
 Sublink.prototype.toString = function () {
-  var name = this._name ? ' ' + this._name : ''
+  var name = this.name ? ' ' + this.name : ''
   return '<Sublink' + name + '>'
 }
 
 Sublink.prototype.sublink = function (name) {
   var sublink = new Sublink(this._levelup)
-  sublink._name = name
+  sublink.name = name
   sublink._path = this._path.concat(name)
   sublink._prefix = this._prefix + SEPARATOR + name + SEPARATOR
   return sublink
