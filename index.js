@@ -16,9 +16,17 @@ function Sublink (levelup) {
     return new Sublink(levelup)
   }
 
-  this._levelup = levelup
-  this._path = []
-  this._prefix = ''
+  if (levelup instanceof Sublink) {
+    this._levelup = levelup._levelup
+    this._name = levelup.name
+    this._path = levelup._path.slice()
+    this._prefix = levelup._prefix
+  } else {
+    this._levelup = levelup
+    this._name = ''
+    this._path = []
+    this._prefix = ''
+  }
 }
 
 Sublink.prototype.toString = function () {
