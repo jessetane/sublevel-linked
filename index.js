@@ -11,14 +11,6 @@ function thru (f) {
   return tr
 }
 
-var toPathRegex = new RegExp(SEPARATOR + '+', 'g')
-
-function toPath (rawKeyPath) {
-  var path = rawKeyPath.replace(toPathRegex, '/')
-  if (path[0] !== '/') path = '/' + path
-  return path
-}
-
 function Sublink (levelup) {
   if (!(this instanceof Sublink)) {
     return new Sublink(levelup)
@@ -50,12 +42,8 @@ Sublink.prototype.put = function (key, value, opts, cb) {
 
   var self = this
   this._isLink(key, function (err, isLink) {
-    if (err || isLink) {
-      if (!err && isLink) {
-        err = new Error('cannot overwrite sublink at key ' + key)
-      }
-      return cb(err)
-    }
+    if (err) return cb(err)
+
     var batch = [
       {
         type: 'put',
@@ -63,11 +51,23 @@ Sublink.prototype.put = function (key, value, opts, cb) {
         value: value
       }
     ]
+
+    if (isLink) {
+      self._delLink(key, function (err, delBatch) {
+        if (err) return cb(err)
+        doPut(delBatch.concat(batch))
+      })
+    } else {
+      doPut(batch, cb)
+    }
+  })
+
+  function doPut (batch) {
     self._ensureParentLinks(batch, function (err) {
       if (err) return cb(err)
       self._levelup.batch(batch, opts, cb)
     })
-  })
+  }
 }
 
 Sublink.prototype.get = function (key, opts, cb) {
@@ -120,62 +120,48 @@ Sublink.prototype.batch = function (batch, opts, cb) {
   }
 
   var self = this
-  var conflicts = {}
   var delBatch = []
   var hasPut = false
   var n = batch.length
+
   batch.forEach(function (chunk, i) {
-    var isPut = chunk.type === 'put'
-    if (isPut) hasPut = true
     self._isLink(chunk.key, function (err, isLink) {
       if (cb._called) return
       if (err) {
         cb._called = true
         return cb(err)
       }
+      hasPut = hasPut || chunk.type === 'put'
       batch[i] = {
         type: chunk.type,
         key: self._prefix + chunk.key,
         value: chunk.value
       }
       if (isLink) {
-        if (isPut) {
-          conflicts[chunk.key] = conflicts[chunk.key] !== false
-          if (--n === 0) maybeReady()
-        } else {
-          conflicts[chunk.key] = false
-          self._delLink(chunk.key, function (err, _delBatch) {
-            if (cb._called) return
-            if (err) {
-              cb._called = true
-              return cb(err)
-            }
-            delBatch = delBatch.concat(_delBatch)
-            if (--n === 0) maybeReady()
-          })
-        }
+        self._delLink(chunk.key, function (err, _delBatch) {
+          if (cb._called) return
+          if (err) {
+            cb._called = true
+            return cb(err)
+          }
+          delBatch = delBatch.concat(_delBatch)
+          if (--n === 0) ready()
+        })
       } else {
-        if (--n === 0) maybeReady()
+        if (--n === 0) ready()
       }
     })
   })
 
-  function maybeReady () {
+  function ready () {
     if (hasPut) {
-      for (var key in conflicts) {
-        if (conflicts[key]) {
-          return cb(new Error('cannot overwrite sublink at key ' + key))
-        }
-      }
-      self._ensureParentLinks(batch, ready)
+      self._ensureParentLinks(batch, function (err) {
+        if (err) return cb(err)
+        self._levelup.batch(delBatch.concat(batch), opts, cb)
+      })
     } else {
-      ready()
+      self._levelup.batch(delBatch.concat(batch), opts, cb)
     }
-  }
-
-  function ready (err) {
-    if (err) return cb(err)
-    self._levelup.batch(delBatch.concat(batch), opts, cb)
   }
 }
 
@@ -263,27 +249,29 @@ Sublink.prototype._ensureParentLinks = function (batch, cb) {
   var self = this
   var prefix = ''
   var n = this._path.length
+
   this._path.forEach(function (name) {
     var localPrefix = prefix
     prefix += SEPARATOR + name + SEPARATOR
     self._levelup.get(localPrefix + name, function (err) {
       if (cb._called) return
       if (err) {
-        if (err.notFound) {
-          err = null
-          batch[batch.length] = {
-            type: 'put',
-            key: localPrefix + name + LINK_SUFFIX,
-            value: LINK_SUFFIX
-          }
+        if (!err.notFound) {
+          cb._called = true
+          return cb(err)
         }
       } else {
-        err = new Error('cannot overwrite existing value at key ' + toPath(localPrefix + name))
+        batch[batch.length] = {
+          type: 'del',
+          key: localPrefix + name
+        }
       }
-      if (err || --n === 0) {
-        cb._called = true
-        cb(err)
+      batch[batch.length] = {
+        type: 'put',
+        key: localPrefix + name + LINK_SUFFIX,
+        value: LINK_SUFFIX
       }
+      if (--n === 0) cb()
     })
   })
 }
