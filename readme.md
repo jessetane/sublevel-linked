@@ -46,7 +46,6 @@ $ npm run test
 * Currently options are passed through to underlying levelup calls, however altering keyEncoding would break this module so maybe don't do that.
 
 ## Changelog
-
 #### 3.0.0
 * Don't require explictly deletes before overwrites - higher level modules can handle this
 * Expose public `name` property
