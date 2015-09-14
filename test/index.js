@@ -253,3 +253,12 @@ tape('ensure parent links', function (t) {
     })
   })
 })
+
+tape('pass in sublink as levelup', function (t) {
+  t.plan(3)
+
+  var sub = Sublink(db.sublink('a').sublink('b'))
+  t.equal(sub.name, 'b')
+  t.equal(sub._path.length, 2)
+  t.equal(sub._prefix, Sublink.SEPARATOR + 'a' + Sublink.SEPARATOR + Sublink.SEPARATOR + 'b' + Sublink.SEPARATOR)
+})
