@@ -46,12 +46,15 @@ $ npm run test
 * Currently options are passed through to underlying levelup calls, however altering keyEncoding would break this module so maybe don't do that.
 
 ## Changelog
+
 #### 3.0.0
 * Don't require explictly deletes before overwrites - higher level modules can handle this
 * Expose public `name` property
 * Add public `superlink` method
+
 #### 2.0.0
 * Require explicitly deleting sublinks before overwriting with a value and vice-versa
+
 #### 1.0.0
 * First working version
 
