@@ -1,6 +1,6 @@
 {
   "name": "sublink",
-  "version": "3.0.1",
+  "version": "4.0.0",
   "description": "Like level-sublevel but with links to nested keyspaces",
   "scripts": {
     "test": "standard && tape test/*"
