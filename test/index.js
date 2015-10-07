@@ -59,19 +59,19 @@ tape('put to sublink overwrites existing value', function (t) {
     var rs = raw.createReadStream()
     var expected = [
       {
-        key: 'a' + Sublink.LINK_SUFFIX,
-        value: Sublink.LINK_SUFFIX
+        key: 'a\x00',
+        value: '\x00'
       }, {
         key: 'x',
         value: '42'
       }, {
-        key: Sublink.SEPARATOR + 'a' + Sublink.SEPARATOR + 'b' + Sublink.LINK_SUFFIX,
-        value: Sublink.LINK_SUFFIX
+        key: '~a~b\x00',
+        value: '\x00'
       }, {
-        key: Sublink.SEPARATOR + 'a' + Sublink.SEPARATOR + Sublink.SEPARATOR + 'b' + Sublink.SEPARATOR + 'x',
+        key: '~a~~b~x',
         value: '42'
       }
-    ]
+    ].map(replaceSeparator)
 
     var n = 0
     rs.on('data', function (chunk) {
@@ -211,8 +211,8 @@ tape('del', function (t) {
   })
 })
 
-tape('ensure parent links', function (t) {
-  t.plan(11)
+tape('put / del super links', function (t) {
+  t.plan(13)
 
   var sub = db
     .sublink('q')
@@ -223,32 +223,43 @@ tape('ensure parent links', function (t) {
   sub.put('x', '42', function (err) {
     t.error(err)
 
-    var S = Sublink.SEPARATOR
-    var L = Sublink.LINK_SUFFIX
     var rs = raw.createReadStream()
     var expected = [
       {
-        key: 'q' + L,
-        value: L
+        key: 'q\x00',
+        value: '\x00'
       }, {
-        key: S + 'q' + S + 'w' + L,
-        value: L
+        key: '~q~w\x00',
+        value: '\x00'
       }, {
-        key: S + 'q' + S + S + 'w' + S + 'e' + L,
-        value: L
+        key: '~q~~w~e\x00',
+        value: '\x00'
       }, {
-        key: S + 'q' + S + S + 'w' + S + S + 'e' + S + 'r' + L,
-        value: L
+        key: '~q~~w~~e~r\x00',
+        value: '\x00'
       }, {
-        key: S + 'q' + S + S + 'w' + S + S + 'e' + S + S + 'r' + S + 'x',
+        key: '~q~~w~~e~~r~x',
         value: '42'
       }
-    ]
+    ].map(replaceSeparator)
 
     var n = 0
     rs.on('data', function (chunk) {
       t.equal(chunk.key, expected[n].key)
       t.equal(chunk.value, expected[n++].value)
+    })
+    rs.on('end', function () {
+      sub.del('x', function (err) {
+        t.error(err)
+
+        var rs = raw.createReadStream()
+        rs.on('data', function (chunk) {
+          t.fail()
+        })
+        rs.on('end', function (chunk) {
+          t.pass()
+        })
+      })
     })
   })
 })
@@ -275,3 +286,8 @@ tape('superlink', function (t) {
   t.equal(sub._path.length, 0)
   t.equal(sub._prefix, '')
 })
+
+function replaceSeparator (chunk) {
+  chunk.key = chunk.key.replace(/~/g, Sublink.SEPARATOR)
+  return chunk
+}
