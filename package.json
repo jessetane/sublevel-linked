@@ -3,7 +3,7 @@
   "version": "3.0.1",
   "description": "Like level-sublevel but with links to nested keyspaces",
   "scripts": {
-    "test": "standard && node test"
+    "test": "standard && tape test/*"
   },
   "devDependencies": {
     "memdb": "^1.0.1",
