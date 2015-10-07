@@ -1,8 +1,7 @@
-var memdown = require('memdown')
-var levelup = require('levelup')
+var memup = require('memdb')
 var Sublink = require('../')
 
-var db = Sublink(levelup('/tmp/db', { db: memdown }))
+var db = Sublink(memup())
 
 db.put('x', '42', function () {
   var y = db.sublink('y')

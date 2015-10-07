@@ -1,9 +1,8 @@
 var tape = require('tape')
-var memdown = require('memdown')
-var levelup = require('levelup')
+var memup = require('memdb')
 var Sublink = require('../')
 
-var raw = levelup('/tmp/db', { db: memdown })
+var raw = memup()
 var db = Sublink(raw)
 
 tape('put', function (t) {

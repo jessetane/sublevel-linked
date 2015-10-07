@@ -6,8 +6,7 @@
     "test": "standard && node test"
   },
   "devDependencies": {
-    "levelup": "^1.2.1",
-    "memdown": "^1.0.0",
+    "memdb": "^1.0.1",
     "standard": "^5.1.1",
     "tape": "^4.2.0"
   },
