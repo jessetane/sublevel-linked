@@ -11,11 +11,10 @@ Keys are sorted as utf8. U+10FFFF (0xF4, 0x8F, 0xBF, 0xBF) is used as a separato
 
 ## Example
 ```javascript
-var memdown = require('memdown')
-var levelup = require('levelup')
+var memup = require('memdb')
 var Sublink = require('../')
 
-var db = Sublink(levelup('/tmp/db', { db: memdown }))
+var db = Sublink(memup())
 
 db.put('x', '42', function () {
   var y = db.sublink('y')
@@ -42,10 +41,12 @@ $ npm run test
 ```
 
 ## Notes
-* Atomicity is not guaranteed! Although unlikely, data corruption is probably possible because keys must be read (asynchronously) and checked for existence before updates can be written.
 * Currently options are passed through to underlying levelup calls, however altering keyEncoding would break this module so maybe don't do that.
 
 ## Changelog
+#### 4.0.0
+* Add read / write locking. The implementation is primitive for now, it requires all write operations to hold a global lock.
+
 #### 3.0.0
 * Don't require explictly deletes before overwrites - higher level modules can handle this
 * Expose public `name` property
