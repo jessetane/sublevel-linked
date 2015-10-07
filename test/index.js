@@ -29,9 +29,7 @@ tape('get', function (t) {
 tape('put to sublink', function (t) {
   t.plan(1)
 
-  db
-    .sublink('a')
-    .put('b', '42', function (err) {
+  db.sublink('a').put('b', '42', function (err) {
     t.error(err)
   })
 })
@@ -39,9 +37,7 @@ tape('put to sublink', function (t) {
 tape('get from sublink', function (t) {
   t.plan(2)
 
-  db
-    .sublink('a')
-    .get('b', function (err, value) {
+  db.sublink('a').get('b', function (err, value) {
     t.error(err)
     t.equal(value, '42')
   })
@@ -50,10 +46,7 @@ tape('get from sublink', function (t) {
 tape('put to sublink overwrites existing value', function (t) {
   t.plan(9)
 
-  db
-    .sublink('a')
-    .sublink('b')
-    .put('x', '42', function (err) {
+  db.sublink('a').sublink('b').put('x', '42', function (err) {
     t.error(err)
 
     var rs = raw.createReadStream()
@@ -145,9 +138,7 @@ tape('put overwrites sublinks', function (t) {
 tape('batch', function (t) {
   t.plan(6)
 
-  db
-    .sublink('b')
-    .put('x', '42', function (err) {
+  db.sublink('b').put('x', '42', function (err) {
     t.error(err)
 
     var batch = [
@@ -161,8 +152,7 @@ tape('batch', function (t) {
       }
     ]
 
-    db
-      .batch(batch, function (err) {
+    db.batch(batch, function (err) {
       t.error(err)
 
       var rs = raw.createReadStream()
@@ -188,9 +178,7 @@ tape('batch', function (t) {
 tape('del', function (t) {
   t.plan(4)
 
-  db
-    .sublink('b')
-    .put('x', '42', function (err) {
+  db.sublink('b').put('x', '42', function (err) {
     t.error(err)
 
     db.del('a', function (err) {
